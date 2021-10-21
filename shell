@@ -1,0 +1,434 @@
+#!/bin/bash
+{
+# 421855e9a02373590d43982a01a39298
+# 989e8a518debb11cd8c601a3c460db9e2b386639a5b4ab02a235a9fd678bb250c23ad43064d3a28e556bc42a9d703fc31d66a631aeab631bcf6fa2e077052967
+
+set +H -uo pipefail
+
+function echo() {
+printf -- '%s\n' "${@}"
+}
+
+function pkgchk() {
+local "readable" "built_in" "coreutils" "moreutils" "list"
+case "${#}" in
+	0)
+		return 0
+	;;
+esac
+built_in=(
+"." "cd" "echo" "getopts" "mapfile" "set" "type" ":" "command" "enable" "hash" "popd" "shift"
+"typeset" "[" "[[" "compgen" "eval" "help" "printf" "shopt" "ulimit" "alias" "complete" "exec"
+"history" "pushd" "source" "umask" "bg" "compopt" "exit" "jobs" "pwd" "suspend" "unalias" "bind"
+"continue" "export" "kill" "read" "test" "unset" "break" "declare" "false" "let" "readarray"
+"times" "wait" "builtin" "dirs" "fc" "local" "readonly" "trap" "caller" "disown" "fg" "logout"
+"return" "true"
+)
+coreutils=(
+"arch" "b2sum" "base64" "basename" "cat" "chcon" "chgrp" "chmod" "chown" "chroot" "cksum" "comm"
+"cp" "csplit" "cut" "date" "dd" "df" "dir" "dircolors" "dirname" "du" "echo" "env" "expand" "expr"
+"factor" "false" "flock" "fmt" "fold" "groups" "head" "hostid" "id" "install" "join" "link" "ln"
+"logname" "ls" "md5sum" "mkdir" "mkfifo" "mknod" "mktemp" "mv" "nice" "nl" "nohup" "nproc" "numfmt"
+"od" "paste" "pathchk" "pinky" "pr" "printenv" "printf" "ptx" "pwd" "readlink" "realpath" "rm"
+"rmdir" "runcon" "sha1sum" "sha256sum" "sha224sum" "sha384sum" "sha512sum" "seq" "shred" "sleep"
+"sort" "split" "stat" "stty" "sum" "sync" "tac" "tail" "tee" "test" "timeout" "touch" "tr" "true"
+"truncate" "tsort" "tty" "uname" "unexpand" "uniq" "unlink" "users" "vdir" "wc" "who" "whoami"
+"yes"
+)
+moreutils=(
+"chronic" "combine" "errno" "ifdata" "ifne" "isutf8" "lckdo" "mispipe" "pee" "sponge" "ts" "vidir"
+"vipe" "zrun"
+)
+readarray -t "readable" < <(
+local "arg" "list" "is_coreutils" "is_moreutils" "full_list"
+for arg in "${@}"; do
+	if [[ "${built_in[@]}" =~ "${arg:-""}" ]]; then
+		continue
+	elif [[ "${coreutils[@]}" =~ "${arg:-""}" ]]; then
+		is_coreutils=1
+	elif [[ "${moreutils[@]}" =~ "${arg:-""}" ]]; then
+		is_moreutils=1
+	else
+		case "${arg:-""}" in
+			"")
+				continue
+			;;
+			*)
+				list+=( "${arg}" )
+			;;
+		esac
+	fi
+done
+case "${is_coreutils:-"0"}" in
+	1)
+		full_list+=( "coreutils" )
+	;;
+esac
+case "${is_moreutils:-"0"}" in
+	1)
+		full_list+=( "moreutils" )
+	;;
+esac
+full_list+=( "${list[@]}" )
+case "${#full_list[@]}" in
+	0)
+		return 0
+	;;
+	*)
+		printf -- '%s\n' "${full_list[@]}"
+	;;
+esac
+)
+case "${#readable[@]}" in
+	0)
+		return 0
+	;;
+esac
+readarray -t "list" < <( command -v -- "${@}" )
+case "${#}" in
+	"${#list[@]}"|0)
+		return 0
+	;;
+	*)
+		echo "${name:-"${0##*"/"}"}: please install: ${readable[*]}"
+		exit 1
+	;;
+esac
+}
+
+function show_help() {
+local "text"
+text="Usage: ${name:-"${0##*"/"}"} [OPTION]... [FILE]...
+Check integrity of GOG games and goodies with Connie.
+
+  -h, --help
+        display this help and exit
+      --version
+        output version information and exit
+  -q, --quiet
+        quiet mode"
+printf -- '%s\n' "${text}"
+exit "${1:-"0"}"
+}
+
+function show_version() {
+printf -- '%s\n' "${name:-"${0##*"/"}"} ${version:-"1.0.0"}"
+exit 0
+}
+
+function setopt() {
+local "OPT" "OPTARG" "OPTERR" "OPTIND" "QUIET" "chkp"
+OPTIND=1
+OPTERR=0
+while getopts "b:B:hHqQ-:" OPT; do
+	case "${OPT,,}" in
+		h)
+			show_help
+		;;
+		q)
+			QUIET=1
+			argp+=( "-q" )
+		;;
+		-)
+			case "${OPTARG,,}" in
+				h|help)
+					show_help
+				;;
+				version)
+					show_version
+				;;
+				q|quiet)
+					QUIET=1
+					argp+=( "-q" )
+				;;
+				*)
+					show_help 1 1>&2
+				;;
+			esac
+		;;
+		*)
+			show_help 1 1>&2
+		;;
+	esac
+done
+(( OPTDEL = OPTIND - 1 ))
+shift "${OPTDEL:-"0"}"
+unset "OPT" "OPTARG" "OPTERR" "OPTIND"
+OPTIND=1
+OPTERR=1
+case "${QUIET:-"0"}" in
+	1)
+		exec 2>/dev/null
+	;;
+esac
+case "${#}" in
+	0)
+		exit 0
+	;;
+	*)
+		argv=( "${@}" )
+	;;
+esac
+argv=( "${argv[@]/#"file://"}" )
+while [[ "${argv[*]}" =~ // ]]; do
+	argv=( "${argv[@]//"//"/"/"}" )
+done
+argv=( "${argv[@]%"/"}" )
+readarray -t argq < <( printf -- '%q\n' "${argv[@]}" )
+argc="${#argv[@]}"
+readarray -t chkp < <( command -v -- parallel parallel.moreutils )
+if (( "${#chkp[@]}" <= 1 )); then
+	parallelize=0
+fi
+}
+
+function setdat() {
+local "datalist" "msgd" "msgr" "msgn" "data"
+msgd="Is a directory"
+msgr="Permission denied"
+msgn="No such file or directory"
+data="${1}"
+case "${data}" in
+	"-")
+		return 0
+	;;
+esac
+if [[ -d "${data}" ]]; then
+	if shopt -q -- globstar; then
+		readarray -t datalist < <( printf -- '%s\n' "${data}/"** )
+		for data in "${datalist[@]}"; do
+			if [[ -d "${data}" ]]; then
+				continue
+			elif [[ -e "${data}" ]]; then
+				if [[ -r "${data}" ]]; then
+					process "${data}"
+				else
+					printf -- '%s\n' "${name:-"${0##*"/"}"}: ${data}: ${msgr}" 1>&2
+					code=1
+				fi
+			else
+				printf -- '%s\n' "${name:-"${0##*"/"}"}: ${data}: ${msgn}" 1>&2
+				code=1
+			fi
+		done
+	else
+		printf -- '%s\n' "${name:-"${0##*"/"}"}: ${data}: ${msgd}" 1>&2
+		code=1
+	fi
+elif [[ -e "${1}" ]]; then
+	if [[ -r "${1}" ]]; then
+		process "${data}"
+	else
+		printf -- '%s\n' "${name:-"${0##*"/"}"}: ${data}: ${msgr}" 1>&2
+		code=1
+	fi
+else
+	printf -- '%s\n' "${name:-"${0##*"/"}"}: ${data}: ${msgn}" 1>&2
+	code=1
+fi
+}
+
+selfcheck() {
+local "self" "self_no_hash" "self_hash" "self_check"
+self=$( head --lines=434 -- "${0}" | base64 --wrap=0 2>/dev/null )
+self="${self:-"Cg=="}"
+self_no_hash=$( printf -- '%s\n' "${self}" | base64 -d 2>/dev/null | grep -Ev -- "^# [a-f0-9]{32}$|^# [a-f0-9]{128}$" 2>/dev/null | base64 --wrap=0 2>/dev/null )
+self_no_hash="${self_no_hash:-"Cg=="}"
+if type b2sum >/dev/null 2>&1; then
+	self_hash=$( printf -- '%s\n' "${self}" | base64 -d 2>/dev/null | grep -Em 1 -- "^# [a-f0-9]{128}$" 2>/dev/null )
+	self_check=$( printf -- '%s\n' "${self_no_hash}" | base64 -d 2>/dev/null | b2sum 2>/dev/null )
+else
+	self_hash=$( printf -- '%s\n' "${self}" | base64 -d 2>/dev/null | grep -Em 1 -- "^# [a-f0-9]{32}$" 2>/dev/null )
+	self_check=$( printf -- '%s\n' "${self_no_hash}" | base64 -d 2>/dev/null | md5sum 2>/dev/null )
+fi
+self_hash="${self_hash:-"unknown"}"
+self_check="${self_check:-"none"}"
+case "${self_hash##"# "}" in
+	"${self_check%%"  -"}")
+		:
+	;;
+	*)
+		printf -- '%s\n' "${0##*"/"}: self-integrity verification: FAILED" 1>&2
+		exit 1
+	;;
+esac
+}
+
+function read_bin() {
+if [[ -s "${0}" ]]; then
+	if tail --bytes=10118316 -- "${0}"; then
+		return 0
+	else
+		return 1
+	fi
+else
+	return 1
+fi
+}
+
+function datchk() {
+local "dat_hash" "self_hash"
+dat_hash="6f825a138a3495006f9f34706d107cbdc99e348803ef41f172c5204bb1db8bb1b77e59547348c29cf0a585849e2000a07875f75e3ff7a2503c6badf64f235cc9"
+self_hash=$( read_bin | b2sum )
+case "${dat_hash}" in
+	"${self_hash/%"  -"}")
+		return 0
+	;;
+	*)
+		printf -- '%s\n' "${0##*"/"}: self-integrity verification: FAILED" 1>&2
+		exit 1
+	;;
+esac
+}
+
+function crc32() {
+local "script"
+script="#!/usr/bin/env python
+from __future__ import print_function
+import sys, os, zlib
+from io import DEFAULT_BUFFER_SIZE as DEFAULT
+
+sys.tracebacklimit = 0
+APP = \"crc32\"
+CODE = 0
+
+def crc32_calc(FILENAME):
+	CRC = 0
+	with open(FILENAME, 'rb') as openfile:
+		while True:
+			DATA = openfile.read(DEFAULT)
+			if not DATA:
+				break
+			CRC = zlib.crc32(DATA, CRC)
+
+		return CRC
+
+if __name__ == '__main__':
+	try:
+		if len(sys.argv) < 2:
+			sys.exit(CODE)
+		else:
+			for ARG in sys.argv[1:]:
+				if os.path.isdir(ARG):
+					print(APP + \":\", ARG + \": Is a directory\", file=sys.stderr)
+					CODE = 1
+				elif os.path.exists(ARG):
+					try:
+						with open(ARG) as F:
+							FILEPATH = ARG
+					except IOError:
+						print(APP + \":\", ARG + \": Permission denied\", file=sys.stderr)
+						CODE = 1
+						continue
+					CRC32_HASH = crc32_calc(FILEPATH)
+					END_HASH = '%08X' % (CRC32_HASH & 0xffffffff)
+					if len(sys.argv) == 2:
+						print(END_HASH.lower())
+					else:
+						print(END_HASH.lower() + \"\t\" + ARG)
+				else:
+					print (APP + \":\", ARG + \": No such file or directory\", file=sys.stderr)
+					CODE = 1
+	
+	except KeyboardInterrupt:
+		sys.exit(130)
+
+sys.exit(CODE)"
+python <( echo "${script}" ) /dev/stdin
+}
+
+function compare() {
+local "list" "item"
+readarray -t "list" < <( printf -- '%s\n' "${2}" )
+case "${1:-"start"}" in
+	start)
+		for item in "${list[@]}"; do
+			case "${item}" in
+				"${3}  ${4}")
+					return 0
+				;;
+			esac
+		done
+		return 1
+	;;
+	end)
+		for item in "${list[@]}"; do
+			case "${item}" in
+				*"  ${3}")
+					return 0
+				;;
+			esac
+		done
+		return 1		
+	;;
+esac
+}
+
+function process() {
+local "filename" "line" "size" "size_db" "line_db" "line_raw"
+filename="${1##*'\'}"
+filename="${filename##*'/'}"
+filename="${filename/#' '}"
+filename="${filename/#'-'}"
+filename="${filename//['$`\/:*?"<>|']/"_"}"
+filename="${filename,,}"
+line_db=$( read_bin | tar -xjO -- "${filename}" 2>/dev/null )
+case "${line_db:-""}" in
+	"")
+		unset "filename"
+		echo "${1}: UNKNOWN"
+		code=1
+		return 1
+	;;
+	*)
+		unset "filename"
+		size=$( du --bytes -- "${1}" 2>/dev/null )
+		size="${size%%$'\t'*}"
+		if compare end "${line_db}" "${size}"; then
+			readarray -t "line_raw" < <( pee < "${1}" "${0} --crc32" "md5sum" "sha1sum" )
+			line="${line_raw[0]:0:8}${line_raw[1]%"  -"}${line_raw[2]%"  -"}"
+			if compare start "${line_db}" "${line}" "${size}"; then
+				echo "${1}: OK"
+			else
+				echo "${1}: FAILED"
+				code=1
+				return 1
+			fi
+		else
+			echo "${1}: FAILED"
+			code=1
+			return 1
+		fi
+	;;
+esac
+}
+
+function main() {
+local "data" "name" "version" "code" "argv" "argc" "argi" "argp"
+case "${1:-""}" in
+	"--crc32")
+		if crc32; then
+			exit 0
+		else
+			exit 1
+		fi
+	;;
+esac
+name="${0##*"/"}"
+version="1.0.0"
+pkgchk "base64" "b2sum" "du"  "mkdir" "cp" "python" "md5sum" "sha1sum" "pee"
+selfcheck
+datchk
+setopt "${@}"
+for data in "${argv[@]}"; do
+	setdat "${data}"
+done
+exit "${code:-"0"}"
+}
+
+main "${@//["\$\`\\"]}"
+}
+
+exit 1
+
+# CONNIE'S DATABASE
